@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=600">
+<title>Wortuhr</title>
+<style>
+  /* Für Kindle 5 (D01100): 600 x 800 px, 16 Graustufen. Reines ES5, kein Netz nötig. */
+  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+  body { font-family: Helvetica, Arial, "DejaVu Sans", sans-serif; }
+  #rahmen { position: relative; width: 560px; height: 560px; margin: 14px auto 0 auto; }
+  #raster { position: absolute; left: 22px; top: 22px; border-collapse: collapse; }
+  #raster td { width: 47px; height: 47px; padding: 0; text-align: center; vertical-align: middle;
+               font-size: 38px; color: #c8c8c8; }
+  #raster td.on { color: #000; font-weight: bold; }
+  .punkt { position: absolute; width: 12px; height: 12px; font-size: 28px; line-height: 12px;
+           color: #c8c8c8; text-align: center; }
+  .punkt.on { color: #000; }
+  #p1 { left: 2px; top: 2px; } #p2 { right: 2px; top: 2px; }
+  #p3 { right: 2px; bottom: 2px; } #p4 { left: 2px; bottom: 2px; }
+  #unten { padding: 0 30px; font-family: Georgia, "Times New Roman", serif; text-align: center; }
+  .linie { border-top: 2px solid #000; margin: 10px 0 12px 0; }
+  #datum { font-size: 28px; margin: 0; }
+  #spruch { font-size: 24px; line-height: 31px; font-style: italic; margin: 10px 0 4px 0; }
+  #autor { font-size: 19px; margin: 0; color: #444; }
+</style>
+</head>
+<body>
+<div id="rahmen">
+  <div class="punkt" id="p1">&bull;</div><div class="punkt" id="p2">&bull;</div>
+  <div class="punkt" id="p3">&bull;</div><div class="punkt" id="p4">&bull;</div>
+  <table id="raster"></table>
+</div>
+<div id="unten">
+  <div class="linie"></div>
+  <p id="datum">&nbsp;</p>
+  <p id="spruch">&nbsp;</p>
+  <p id="autor">&nbsp;</p>
+</div>
+
+<script>
+// 11 x 11 Buchstaben (Füllbuchstaben wie bei der Vorlage)
+var RASTER = [
+  "ESKISTJETZT",
+  "FÜNFAZEHNQB",
+  "ZWANZIGPTOM",
+  "DSVIERTELKR",
+  "VORFUNKNACH",
+  "HALBAELFÜNF",
+  "EINSXAMZWEI",
+  "DREIPMJVIER",
+  "SECHSNLACHT",
+  "SIEBENZWÖLF",
+  "ZEHNEUNKUHR"
+];
+// Wort -> [Zeile, erste Spalte, letzte Spalte]
+var WORT = {
+  es:[0,0,1], ist:[0,3,5], jetzt:[0,6,10],
+  mfuenf:[1,0,3], mzehn:[1,5,8],
+  zwanzig:[2,0,6],
+  viertel:[3,2,8],
+  vor:[4,0,2], nach:[4,7,10],
+  halb:[5,0,3], h11:[5,5,7], h5:[5,7,10],
+  h1a:[6,0,2], h1b:[6,3,3], h2:[6,7,10],
+  h3:[7,0,3], h4:[7,7,10],
+  h6:[8,0,4], h8:[8,7,10],
+  h7:[9,0,5], h12:[9,6,10],
+  h10:[10,0,3], h9:[10,3,6], uhrwort:[10,8,10]
+};
+
+// "jetzt" nur ab und zu: etwa jeder dritte Fünf-Minuten-Schritt, fest je Tag und Uhrzeit
+function mitJetzt(d) {
+  var x = d.getDate() * 31 + d.getHours() * 12 + Math.floor(d.getMinutes() / 5);
+  x = (x * 2654435761) % 4294967296;
+  return (x % 3) === 0;
+}
+
+var SPRUECHE = [
+  ["Es ist nicht wenig Zeit, die wir haben, sondern viel, die wir nicht nutzen.", "Seneca"],
+  ["Wir leiden öfter in der Einbildung als in der Wirklichkeit.", "Seneca"],
+  ["Das Glück deines Lebens hängt von der Beschaffenheit deiner Gedanken ab.", "Marc Aurel"],
+  ["Nicht die Dinge beunruhigen die Menschen, sondern die Meinungen über die Dinge.", "Epiktet"],
+  ["Wer ein Warum zum Leben hat, erträgt fast jedes Wie.", "Friedrich Nietzsche"],
+  ["Auch eine Reise von tausend Meilen beginnt mit dem ersten Schritt.", "Laozi"],
+  ["Wer andere kennt, ist klug; wer sich selbst kennt, ist weise.", "Laozi"],
+  ["Habe Mut, dich deines eigenen Verstandes zu bedienen.", "Immanuel Kant"],
+  ["Es ist nicht genug zu wissen, man muss auch anwenden.", "J. W. von Goethe"],
+  ["Wo viel Licht ist, ist starker Schatten.", "J. W. von Goethe"],
+  ["Man sieht nur mit dem Herzen gut.", "Antoine de Saint-Exupéry"],
+  ["Beginne, und du bist halb am Ziel.", "Horaz"],
+  ["Nutze den Tag.", "Horaz"],
+  ["Ich weiß, dass ich nichts weiß.", "Sokrates"],
+  ["Jeder Tag ist ein kleines Leben.", "Arthur Schopenhauer"],
+  ["Niemand steigt zweimal in denselben Fluss.", "Heraklit"],
+  ["Wer sich an wenigem nicht genügen lässt, dem genügt nichts.", "Epikur"],
+  ["Der Mensch ist nur da ganz Mensch, wo er spielt.", "Friedrich Schiller"],
+  ["Die beste Zeit, einen Baum zu pflanzen, war vor zwanzig Jahren. Die zweitbeste ist jetzt.", "Sprichwort"],
+  ["Wer will, findet Wege; wer nicht will, findet Gründe.", "Sprichwort"],
+  ["Auf Regen folgt Sonnenschein.", "Sprichwort"],
+  ["Du hast Macht über deinen Geist, nicht über äußere Ereignisse.", "Marc Aurel"],
+  ["Kleine Schritte führen auch ans Ziel.", "Sprichwort"],
+  ["Heute ist der erste Tag vom Rest deines Lebens.", "Sprichwort"]
+];
+var WOCHENTAGE = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+var MONATE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+
+function el(id) { return document.getElementById(id); }
+
+// Raster einmalig aufbauen
+(function () {
+  var html = "", r, c;
+  for (r = 0; r < RASTER.length; r++) {
+    html += "<tr>";
+    for (c = 0; c < RASTER[r].length; c++) {
+      html += '<td id="z' + r + "_" + c + '">' + RASTER[r].charAt(c) + "</td>";
+    }
+    html += "</tr>";
+  }
+  el("raster").innerHTML = html;
+})();
+
+// Zu markierende Wörter für Stunde h (0-23) und Minute m
+function woerter(h, m) {
+  var a = ["es", "ist"], plus = 0, voll = false;
+  switch (Math.floor(m / 5)) {
+    case 0:  voll = true; break;
+    case 1:  a.push("mfuenf", "nach"); break;
+    case 2:  a.push("mzehn", "nach"); break;
+    case 3:  a.push("viertel", "nach"); break;
+    case 4:  a.push("zwanzig", "nach"); break;
+    case 5:  a.push("mfuenf", "vor", "halb"); plus = 1; break;
+    case 6:  a.push("halb"); plus = 1; break;
+    case 7:  a.push("mfuenf", "nach", "halb"); plus = 1; break;
+    case 8:  a.push("zwanzig", "vor"); plus = 1; break;
+    case 9:  a.push("viertel", "vor"); plus = 1; break;
+    case 10: a.push("mzehn", "vor"); plus = 1; break;
+    case 11: a.push("mfuenf", "vor"); plus = 1; break;
+  }
+  var n = (h + plus) % 12;
+  if (n === 0) n = 12;
+  if (n === 1) { a.push("h1a"); if (!voll) a.push("h1b"); }   // "ein Uhr" / "fünf nach eins"
+  else { a.push("h" + n); }
+  if (voll) a.push("uhrwort");
+  return a;
+}
+
+var letzterStand = "", letzterTag = -1;
+
+function zeichne() {
+  var d = new Date(), h = d.getHours(), m = d.getMinutes(), r, c, i;
+  var stand = h + ":" + m;
+  if (stand !== letzterStand) {             // nur bei Minutenwechsel neu zeichnen
+    letzterStand = stand;
+    var an = {}, liste = woerter(h, m), w;
+    if (mitJetzt(d)) liste.push("jetzt");
+    for (i = 0; i < liste.length; i++) {
+      w = WORT[liste[i]];
+      for (c = w[1]; c <= w[2]; c++) an[w[0] + "_" + c] = true;
+    }
+    for (r = 0; r < RASTER.length; r++) {
+      for (c = 0; c < RASTER[r].length; c++) {
+        var zelle = el("z" + r + "_" + c), soll = an[r + "_" + c] ? "on" : "";
+        if (zelle.className !== soll) zelle.className = soll;
+      }
+    }
+    for (i = 1; i <= 4; i++) el("p" + i).className = "punkt" + ((i <= m % 5) ? " on" : "");
+  }
+  var tag = d.getDate();
+  if (tag !== letzterTag) {                 // Datum und Spruch beim Tageswechsel
+    letzterTag = tag;
+    el("datum").innerHTML = WOCHENTAGE[d.getDay()] + ", " + tag + ". " + MONATE[d.getMonth()] + " " + d.getFullYear();
+    var nr = Math.floor((new Date(d.getFullYear(), d.getMonth(), tag) - new Date(d.getFullYear(), 0, 1)) / 86400000);
+    var s = SPRUECHE[nr % SPRUECHE.length];
+    el("spruch").innerHTML = "&bdquo;" + s[0] + "&ldquo;";
+    el("autor").innerHTML = "&mdash; " + s[1];
+  }
+}
+
+zeichne();
+setInterval(zeichne, 20000);
+</script>
+</body>
+</html>
