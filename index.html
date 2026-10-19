@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=600">
+<meta http-equiv="refresh" content="1800">
+<title>Kindle Tagesanzeige</title>
+<style>
+  /* Optimiert für Kindle 5 (D01100): 600 x 800 px, 167 ppi, 16 Graustufen, Schwarz/Weiß */
+  html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+  body { font-family: Georgia, "Times New Roman", serif; width: 100%; }
+  #wrap { padding: 14px 18px; }
+  #time { font-size: 120px; line-height: 120px; text-align: center; font-weight: bold; letter-spacing: 2px; margin: 6px 0 0 0; }
+  #date { font-size: 34px; text-align: center; margin: 8px 0 14px 0; }
+  .rule { border-top: 3px solid #000; margin: 10px 0; }
+  .thin { border-top: 1px solid #555; margin: 10px 0; }
+  #place { font-size: 22px; text-align: center; margin: 0; color: #333; }
+  #now { font-size: 54px; text-align: center; font-weight: bold; margin: 6px 0 0 0; }
+  #desc { font-size: 30px; text-align: center; margin: 2px 0 8px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  td { width: 33%; text-align: center; vertical-align: top; font-size: 22px; padding: 6px 2px; border-left: 1px solid #555; }
+  td.first { border-left: 0; }
+  td b { font-size: 24px; display: block; margin-bottom: 2px; }
+  #quote { font-size: 32px; line-height: 40px; text-align: center; font-style: italic; margin: 16px 6px 6px 6px; }
+  #author { font-size: 24px; text-align: center; margin: 0; }
+  #status { font-size: 15px; text-align: center; color: #555; margin: 12px 0 0 0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="time">--:--</div>
+  <div id="date">&nbsp;</div>
+  <div class="rule"></div>
+  <p id="place">Wetter · 35232 Dautphetal</p>
+  <p id="now">-- &deg;C</p>
+  <p id="desc">Wetter wird geladen &hellip;</p>
+  <table><tr id="forecast"></tr></table>
+  <div class="rule"></div>
+  <p id="quote">&nbsp;</p>
+  <p id="author">&nbsp;</p>
+  <div class="thin"></div>
+  <p id="status">&nbsp;</p>
+</div>
+
+<script>
+// Bewusst reines ES5 (kein let/const, keine Pfeilfunktionen, kein fetch),
+// damit der alte Kindle-Browser die Seite versteht.
+
+// ---- Einstellungen -------------------------------------------------------
+var LAT = 50.88;           // ungefähre Koordinaten für PLZ 35232
+var LON = 8.57;
+var WETTER_INTERVALL_MIN = 30;   // Wetter alle 30 Min. neu laden
+var UHR_INTERVALL_SEK = 30;      // Uhr alle 30 Sek. prüfen (schont das E-Ink-Display)
+
+// ---- Tagessprüche (sinngemäße deutsche Fassungen) --------------------------
+var SPRUECHE = [
+  ["Es ist nicht wenig Zeit, die wir haben, sondern viel, die wir nicht nutzen.", "Seneca"],
+  ["Wir leiden öfter in der Einbildung als in der Wirklichkeit.", "Seneca"],
+  ["Das Glück deines Lebens hängt von der Beschaffenheit deiner Gedanken ab.", "Marc Aurel"],
+  ["Was dem Schwarm nicht schadet, schadet auch der Biene nicht.", "Marc Aurel"],
+  ["Nicht die Dinge beunruhigen die Menschen, sondern die Meinungen über die Dinge.", "Epiktet"],
+  ["Wer ein Warum zum Leben hat, erträgt fast jedes Wie.", "Friedrich Nietzsche"],
+  ["Auch eine Reise von tausend Meilen beginnt mit dem ersten Schritt.", "Laozi"],
+  ["Wer andere kennt, ist klug; wer sich selbst kennt, ist weise.", "Laozi"],
+  ["Habe Mut, dich deines eigenen Verstandes zu bedienen.", "Immanuel Kant"],
+  ["Es ist nicht genug zu wissen, man muss auch anwenden; es ist nicht genug zu wollen, man muss auch tun.", "J. W. von Goethe"],
+  ["Wo viel Licht ist, ist starker Schatten.", "J. W. von Goethe"],
+  ["Das Leben ist kurz, die Kunst ist lang.", "Hippokrates"],
+  ["Man sieht nur mit dem Herzen gut.", "Antoine de Saint-Exupéry"],
+  ["Beginne, und du bist halb am Ziel.", "Horaz"],
+  ["Nutze den Tag.", "Horaz"],
+  ["Ich weiß, dass ich nichts weiß.", "Sokrates"],
+  ["Jeder Tag ist ein kleines Leben.", "Arthur Schopenhauer"],
+  ["Niemand steigt zweimal in denselben Fluss.", "Heraklit"],
+  ["Mut steht am Anfang des Handelns, Glück am Ende.", "Demokrit"],
+  ["Wer sich an wenigem nicht genügen lässt, dem genügt nichts.", "Epikur"],
+  ["Der Mensch ist nur da ganz Mensch, wo er spielt.", "Friedrich Schiller"],
+  ["Das Leben besteht nicht darin, gute Karten zu haben, sondern mit schlechten gut zu spielen.", "R. L. Stevenson"],
+  ["Die beste Zeit, einen Baum zu pflanzen, war vor zwanzig Jahren. Die zweitbeste ist jetzt.", "Sprichwort"],
+  ["Wer will, findet Wege; wer nicht will, findet Gründe.", "Sprichwort"],
+  ["Auf Regen folgt Sonnenschein.", "Sprichwort"],
+  ["Wer fragt, ist für eine Minute ein Narr; wer nicht fragt, bleibt es ein Leben lang.", "Chinesisches Sprichwort"],
+  ["Wir haben nicht zu wenig Zeit, wir verschwenden nur zu viel davon.", "Seneca"],
+  ["Du hast Macht über deinen Geist, nicht über äußere Ereignisse. Erkenne das, und du findest Stärke.", "Marc Aurel"],
+  ["Was uns nicht umbringt, macht uns stärker.", "Friedrich Nietzsche"],
+  ["Der Weise sucht nicht das Angenehme, sondern das Schmerzfreie.", "Aristoteles"],
+  ["Kleine Schritte führen auch ans Ziel.", "Sprichwort"],
+  ["Heute ist der erste Tag vom Rest deines Lebens.", "Sprichwort"]
+];
+
+// ---- Hilfsfunktionen -----------------------------------------------------
+var WOCHENTAGE = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+var MONATE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+
+function zwei(n) { return n < 10 ? "0" + n : "" + n; }
+
+function tagDesJahres(d) {
+  var start = new Date(d.getFullYear(), 0, 0);
+  var diff = (d - start) + ((start.getTimezoneOffset() - d.getTimezoneOffset()) * 60 * 1000);
+  return Math.floor(diff / 86400000);
+}
+
+function wettertext(code) {
+  if (code === 0) return "Klar";
+  if (code === 1) return "Überwiegend klar";
+  if (code === 2) return "Wolkig";
+  if (code === 3) return "Bedeckt";
+  if (code === 45 || code === 48) return "Nebel";
+  if (code >= 51 && code <= 57) return "Nieselregen";
+  if (code >= 61 && code <= 65) return "Regen";
+  if (code === 66 || code === 67) return "Gefrierender Regen";
+  if (code >= 71 && code <= 77) return "Schnee";
+  if (code >= 80 && code <= 82) return "Regenschauer";
+  if (code === 85 || code === 86) return "Schneeschauer";
+  if (code === 95) return "Gewitter";
+  if (code === 96 || code === 99) return "Gewitter mit Hagel";
+  return "Wetter";
+}
+
+function el(id) { return document.getElementById(id); }
+
+// ---- Uhr, Datum, Spruch --------------------------------------------------
+var letzteMinute = -1;
+var letzterTag = -1;
+
+function aktualisiereUhr() {
+  var d = new Date();
+  var m = d.getMinutes();
+  if (m !== letzteMinute) {            // nur bei Minutenwechsel neu zeichnen
+    letzteMinute = m;
+    el("time").innerHTML = zwei(d.getHours()) + ":" + zwei(m);
+  }
+  var tag = d.getDate();
+  if (tag !== letzterTag) {            // Datum und Spruch nur beim Tageswechsel
+    letzterTag = tag;
+    el("date").innerHTML = WOCHENTAGE[d.getDay()] + ", " + tag + ". " + MONATE[d.getMonth()] + " " + d.getFullYear();
+    var s = SPRUECHE[tagDesJahres(d) % SPRUECHE.length];
+    el("quote").innerHTML = "&bdquo;" + s[0] + "&ldquo;";
+    el("author").innerHTML = "&mdash; " + s[1];
+  }
+}
+
+// ---- Wetter (Open-Meteo, kostenlos, ohne API-Key) ----------------------------
+function ladeWetter() {
+  var url = "https://api.open-meteo.com/v1/forecast?latitude=" + LAT + "&longitude=" + LON +
+    "&current=temperature_2m,weather_code,wind_speed_10m" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+    "&timezone=Europe%2FBerlin&forecast_days=3";
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", url, true);
+  xhr.onreadystatechange = function () {
+    if (xhr.readyState !== 4) return;
+    if (xhr.status === 200) {
+      try { zeigeWetter(JSON.parse(xhr.responseText)); }
+      catch (e) { fehler("Wetterdaten nicht lesbar"); }
+    } else {
+      fehler("Wetter nicht erreichbar (Status " + xhr.status + ")");
+    }
+  };
+  xhr.onerror = function () { fehler("Wetter nicht erreichbar"); };
+  xhr.send();
+}
+
+function zeigeWetter(j) {
+  var c = j.current;
+  el("now").innerHTML = Math.round(c.temperature_2m) + " &deg;C";
+  el("desc").innerHTML = wettertext(c.weather_code) + " · Wind " + Math.round(c.wind_speed_10m) + " km/h";
+  var dd = j.daily, html = "", i, tag, name;
+  var namen = ["Heute", "Morgen", "Übermorgen"];
+  for (i = 0; i < dd.time.length && i < 3; i++) {
+    tag = new Date(dd.time[i].replace(/-/g, "/") + " 12:00");
+    name = i < 2 ? namen[i] : WOCHENTAGE[tag.getDay()];
+    html += '<td class="' + (i === 0 ? "first" : "") + '"><b>' + name + "</b>" +
+      wettertext(dd.weather_code[i]) + "<br>" +
+      Math.round(dd.temperature_2m_min[i]) + "&deg; / " + Math.round(dd.temperature_2m_max[i]) + "&deg;<br>" +
+      "Regen " + dd.precipitation_probability_max[i] + " %</td>";
+  }
+  el("forecast").innerHTML = html;
+  var n = new Date();
+  el("status").innerHTML = "Wetter-Stand " + zwei(n.getHours()) + ":" + zwei(n.getMinutes()) + " Uhr · Quelle: Open-Meteo";
+}
+
+function fehler(text) {
+  el("desc").innerHTML = text;
+  el("status").innerHTML = "Neuer Versuch in " + WETTER_INTERVALL_MIN + " Minuten";
+}
+
+// ---- Start ---------------------------------------------------------------
+aktualisiereUhr();
+ladeWetter();
+setInterval(aktualisiereUhr, UHR_INTERVALL_SEK * 1000);
+setInterval(ladeWetter, WETTER_INTERVALL_MIN * 60 * 1000);
+</script>
+</body>
+</html>
